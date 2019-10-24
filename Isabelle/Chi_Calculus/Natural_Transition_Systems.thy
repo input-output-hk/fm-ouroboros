@@ -20,6 +20,11 @@ locale natural_transition_system =
     "\<And>P Q. (\<And>a. P a \<sim> Q a) \<Longrightarrow> \<nu> a. P a \<sim> \<nu> a. Q a"
 begin
 
+lemma guard_preservation:
+  assumes "p \<sim> q"
+  shows "\<phi> ? p \<sim> \<phi> ? q"
+  using assms by simp
+
 lemma general_parallel_preservation:
   assumes "\<And>x. f x \<sim> g x"
   shows "general_parallel f xs \<sim> general_parallel g xs"

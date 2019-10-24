@@ -3,6 +3,7 @@ chapter Ouroboros
 session Chi_Calculus_Examples (ouroboros) = Chi_Calculus +
   description \<open>Examples of using the \<chi>-calculus formalization.\<close>
   theories
+    Filtering_On_Receipt_Forwarding_Broadcasting_Equivalence
     Relaying_Broadcasting_Equivalence
   document_files
     "root.tex"

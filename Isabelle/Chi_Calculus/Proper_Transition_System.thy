@@ -303,6 +303,10 @@ private lift_definition new_channel' :: "(chan \<Rightarrow> proper_behavior) \<
   is NewChannel
   using proper_new_channel_preservation .
 
+private lift_definition guard' :: "[bool, proper_behavior] \<Rightarrow> proper_behavior"
+  is guard
+  using proper.guard_preservation .
+
 private lift_definition general_parallel' :: "['a \<Rightarrow> proper_behavior, 'a list] \<Rightarrow> proper_behavior"
   is general_parallel
   using proper.general_parallel_preservation .
@@ -313,6 +317,7 @@ lemmas [equivalence_transfer] =
   receive'.abs_eq
   parallel'.abs_eq
   new_channel'.abs_eq
+  guard'.abs_eq
   general_parallel'.abs_eq
 
 end

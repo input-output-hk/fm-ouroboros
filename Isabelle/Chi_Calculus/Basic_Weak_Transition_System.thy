@@ -97,6 +97,11 @@ private
   using basic_weak_new_channel_preservation .
 
 private
+  lift_definition guard' :: "[bool, basic_weak_behavior] \<Rightarrow> basic_weak_behavior"
+  is guard
+  sorry
+
+private
   lift_definition general_parallel' :: "['a \<Rightarrow> basic_weak_behavior, 'a list] \<Rightarrow> basic_weak_behavior"
   is general_parallel
   sorry
@@ -107,6 +112,7 @@ lemmas [equivalence_transfer] =
   receive'.abs_eq
   parallel'.abs_eq
   new_channel'.abs_eq
+  guard'.abs_eq
   general_parallel'.abs_eq
 
 end
