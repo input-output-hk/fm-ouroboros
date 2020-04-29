@@ -358,7 +358,9 @@ datatype broadcast_msg =
 instance broadcast_msg :: countable
   by countable_datatype
 
-type_synonym broadcast_channel = "broadcast_msg channel"
+type_synonym receive_channel = "broadcast_msg channel"
+
+type_synonym send_channel = "broadcast_msg channel"
 
 subsubsection \<open> The server process \<close>
 
@@ -366,20 +368,21 @@ text \<open>
   Now we are ready to define the process representing a server running the protocol:
 \<close>
 
-corec main_loop :: "broadcast_channel \<Rightarrow> server_env \<Rightarrow> server_state \<Rightarrow> slot \<Rightarrow> process" where
-  "main_loop bc \<Gamma> ss sl =
-    bc \<triangleright>\<degree> msg. (
+corec main_loop :: "send_channel \<Rightarrow> receive_channel \<Rightarrow> server_env \<Rightarrow> server_state \<Rightarrow> slot \<Rightarrow> process"
+where
+  "main_loop s r \<Gamma> ss sl =
+    r \<triangleright>\<degree> msg. (
       case msg of
         BroadcastTx tx \<Rightarrow> (
           let
             ss' = update_mempool ss tx sl
           in
-            main_loop bc \<Gamma> ss' sl)
+            main_loop s r \<Gamma> ss' sl)
       | BroadcastChain \<C> \<Rightarrow> (
           let
             ss' = update_chain ss (se_n \<Gamma>) \<C>
           in
-            main_loop bc \<Gamma> ss' sl)
+            main_loop s r \<Gamma> ss' sl)
       | BroadcastEndSlot sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t \<Rightarrow> (
           let
             ss' = prune_mempool ss sl (se_u \<Gamma>)
@@ -390,17 +393,18 @@ corec main_loop :: "broadcast_channel \<Rightarrow> server_env \<Rightarrow> ser
                 ss'' = extend_chain ss' B\<^sub>n\<^sub>e\<^sub>w;
                 ss''' = clear_mempool ss''
               in
-                bc \<triangleleft>\<degree> BroadcastChain (ss_\<C> ss''') \<parallel> main_loop bc \<Gamma> ss''' sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t)
+                s \<triangleleft>\<degree> BroadcastChain (ss_\<C> ss''') \<parallel> main_loop s r \<Gamma> ss''' sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t)
             else
-              main_loop bc \<Gamma> ss' sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t)))"
+              main_loop s r \<Gamma> ss' sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t)))"
 
-abbreviation node ::
-  "broadcast_channel \<Rightarrow> genesis \<Rightarrow> server_env \<Rightarrow> server_index \<Rightarrow> private_key \<Rightarrow> process" where
-  "node bc G \<Gamma> i sk \<equiv> (
+abbreviation server ::
+  "send_channel \<Rightarrow> receive_channel \<Rightarrow> genesis \<Rightarrow> server_env \<Rightarrow> server_index \<Rightarrow> private_key \<Rightarrow> process"
+where
+  "server s r G \<Gamma> i sk \<equiv> (
     let
       ss\<^sub>i\<^sub>n\<^sub>i\<^sub>t = init_server_state i G sk
     in
-      main_loop bc \<Gamma> ss\<^sub>i\<^sub>n\<^sub>i\<^sub>t first_slot)"
+      main_loop s r \<Gamma> ss\<^sub>i\<^sub>n\<^sub>i\<^sub>t first_slot)"
 
 subsection \<open> Proofs \<close>
 
@@ -652,9 +656,9 @@ lemma main_loop_end_slot_no_mining:
     ss_sk = sk\<^sub>1\<rparr>"
   and "sl = 4"
   and "ss' = ss\<lparr>ss_mempool := [(tx\<^sub>2, 3), (tx\<^sub>3, 4)]\<rparr>"
-  shows "main_loop bc \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>bc \<triangleright>\<degree> msg\<rbrace> main_loop bc \<Gamma> ss' sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t"
+  shows "main_loop s r \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>r \<triangleright>\<degree> msg\<rbrace> main_loop s r \<Gamma> ss' sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t"
 proof -
-  from assms(1) have "main_loop bc \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>bc \<triangleright>\<degree> msg\<rbrace> (
+  from assms(1) have "main_loop s r \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>r \<triangleright>\<degree> msg\<rbrace> (
     let
       ss'' = prune_mempool ss sl (se_u \<Gamma>)
     in (
@@ -664,9 +668,9 @@ proof -
           ss''' = extend_chain ss'' B\<^sub>n\<^sub>e\<^sub>w;
           ss'''' = clear_mempool ss'''
         in
-          bc \<triangleleft>\<degree> BroadcastChain (ss_\<C> ss'''') \<parallel> main_loop bc \<Gamma> ss'''' sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t)
+          s \<triangleleft>\<degree> BroadcastChain (ss_\<C> ss'''') \<parallel> main_loop s r \<Gamma> ss'''' sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t)
       else
-        main_loop bc \<Gamma> ss'' sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t))"
+        main_loop s r \<Gamma> ss'' sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t))"
     using broadcast_msg.simps(12) and main_loop.code and receiving and typed_untyped_value
     by (metis (no_types, lifting))
   with assms(2-5) show ?thesis
@@ -688,7 +692,7 @@ lemma main_loop_end_slot_mining:
   and "B\<^sub>2 = (uB\<^sub>2, sign (ss_sk ss) uB\<^sub>2)"
   and "\<C>\<^sub>n\<^sub>e\<^sub>w = [B\<^sub>1, B\<^sub>2]"
   and "ss' = ss\<lparr>ss_\<C> := \<C>\<^sub>n\<^sub>e\<^sub>w, ss_mempool := []\<rparr>"
-  shows "main_loop bc \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>bc \<triangleright>\<degree> msg\<rbrace> bc \<triangleleft>\<degree> BroadcastChain \<C>\<^sub>n\<^sub>e\<^sub>w \<parallel> main_loop bc \<Gamma> ss' sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t"
+  shows "main_loop s r \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>r \<triangleright>\<degree> msg\<rbrace> s \<triangleleft>\<degree> BroadcastChain \<C>\<^sub>n\<^sub>e\<^sub>w \<parallel> main_loop s r \<Gamma> ss' sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t"
 proof -
   let ?ss'' = "ss\<lparr>ss_mempool := [(tx\<^sub>2, 3), (tx\<^sub>3, 4)]\<rparr>"
   let ?ss''' = "?ss''\<lparr>ss_\<C> := \<C>\<^sub>n\<^sub>e\<^sub>w\<rparr>"
@@ -702,7 +706,7 @@ proof -
     by simp
   with assms(4,9) have f4: "clear_mempool ?ss''' = ss'"
     by simp
-  moreover from assms(1) have "main_loop bc \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>bc \<triangleright>\<degree> msg\<rbrace> (
+  moreover from assms(1) have "main_loop s r \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>r \<triangleright>\<degree> msg\<rbrace> (
     let
       ss'' = prune_mempool ss sl (se_u \<Gamma>)
     in (
@@ -712,9 +716,9 @@ proof -
           ss''' = extend_chain ss'' B\<^sub>n\<^sub>e\<^sub>w;
           ss'''' = clear_mempool ss'''
         in
-          bc \<triangleleft>\<degree> BroadcastChain (ss_\<C> ss'''') \<parallel> main_loop bc \<Gamma> ss'''' sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t)
+          s \<triangleleft>\<degree> BroadcastChain (ss_\<C> ss'''') \<parallel> main_loop s r \<Gamma> ss'''' sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t)
       else
-        main_loop bc \<Gamma> ss'' sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t))"
+        main_loop s r \<Gamma> ss'' sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t))"
     using broadcast_msg.simps(12) and main_loop.code and receiving and typed_untyped_value
     by (metis (no_types, lifting))
   ultimately show ?thesis
@@ -726,10 +730,10 @@ lemma main_loop_consistent_tx_reception:
   assumes "msg = BroadcastTx tx"
   and "is_consistent_tx tx ss"
   and "ss' = ss\<lparr>ss_mempool := (tx, sl) # ss_mempool ss\<rparr>"
-  shows "main_loop bc \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>bc \<triangleright>\<degree> msg\<rbrace> main_loop bc \<Gamma> ss' sl"
+  shows "main_loop s r \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>r \<triangleright>\<degree> msg\<rbrace> main_loop s r \<Gamma> ss' sl"
 proof -
   from assms(1) have "
-    main_loop bc \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>bc \<triangleright>\<degree> msg\<rbrace> main_loop bc \<Gamma> (update_mempool ss tx sl) sl"
+    main_loop s r \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>r \<triangleright>\<degree> msg\<rbrace> main_loop s r \<Gamma> (update_mempool ss tx sl) sl"
     using broadcast_msg.simps(10) and main_loop.code and receiving and typed_untyped_value
     by (metis (no_types, lifting))
   with assms(2,3) show ?thesis
@@ -739,10 +743,10 @@ qed
 lemma main_loop_inconsistent_tx_reception:
   assumes "msg = BroadcastTx tx"
   and "\<not> is_consistent_tx tx ss"
-  shows "main_loop bc \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>bc \<triangleright>\<degree> msg\<rbrace> main_loop bc \<Gamma> ss sl"
+  shows "main_loop s r \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>r \<triangleright>\<degree> msg\<rbrace> main_loop s r \<Gamma> ss sl"
 proof -
   from assms(1) have "
-    main_loop bc \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>bc \<triangleright>\<degree> msg\<rbrace> main_loop bc \<Gamma> (update_mempool ss tx sl) sl"
+    main_loop s r \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>r \<triangleright>\<degree> msg\<rbrace> main_loop s r \<Gamma> (update_mempool ss tx sl) sl"
     using broadcast_msg.simps(10) and main_loop.code and receiving and typed_untyped_value
     by (metis (no_types, lifting))
   moreover from assms(2) have "update_mempool ss tx sl = ss"
@@ -754,10 +758,10 @@ qed
 lemma main_loop_not_longer_chain_reception:
   assumes "length \<C> \<le> length (ss_\<C> ss)"
   and "msg = BroadcastChain \<C>"
-  shows "main_loop bc \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>bc \<triangleright>\<degree> msg\<rbrace> main_loop bc \<Gamma> ss sl"
+  shows "main_loop s r \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>r \<triangleright>\<degree> msg\<rbrace> main_loop s r \<Gamma> ss sl"
 proof -
   from assms(2) have "
-    main_loop bc \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>bc \<triangleright>\<degree> msg\<rbrace> main_loop bc \<Gamma> (update_chain ss (se_n \<Gamma>) \<C>) sl"
+    main_loop s r \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>r \<triangleright>\<degree> msg\<rbrace> main_loop s r \<Gamma> (update_chain ss (se_n \<Gamma>) \<C>) sl"
     using broadcast_msg.simps(11) and main_loop.code and receiving and typed_untyped_value
     by (metis (no_types, lifting))
   moreover from assms(1) have "update_chain ss (se_n \<Gamma>) \<C> = ss"
@@ -771,10 +775,10 @@ lemma main_loop_longer_and_valid_chain_reception:
   and "verify_chain \<C> (ss_G ss) (se_n \<Gamma>)"
   and "msg = BroadcastChain \<C>"
   and "ss' = ss\<lparr>ss_\<C> := \<C>\<rparr>"
-  shows "main_loop bc \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>bc \<triangleright>\<degree> msg\<rbrace> main_loop bc \<Gamma> ss' sl"
+  shows "main_loop s r \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>r \<triangleright>\<degree> msg\<rbrace> main_loop s r \<Gamma> ss' sl"
 proof -
   from assms(3) have "
-    main_loop bc \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>bc \<triangleright>\<degree> msg\<rbrace> main_loop bc \<Gamma> (update_chain ss (se_n \<Gamma>) \<C>) sl"
+    main_loop s r \<Gamma> ss sl \<rightarrow>\<^sub>\<flat>\<lbrace>r \<triangleright>\<degree> msg\<rbrace> main_loop s r \<Gamma> (update_chain ss (se_n \<Gamma>) \<C>) sl"
     using broadcast_msg.simps(11) and main_loop.code and receiving and typed_untyped_value
     by (metis (no_types, lifting))
   moreover from assms(1,2) have "update_chain ss (se_n \<Gamma>) \<C> = ss\<lparr>ss_\<C> := \<C>\<rparr>"

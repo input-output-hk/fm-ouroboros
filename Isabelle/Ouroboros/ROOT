@@ -1,9 +1,10 @@
 chapter Ouroboros
 
-session Ouroboros (ouroboros) = Chi_Calculus +
+session Ouroboros (ouroboros) = Chi_Calculus_Examples +
   description \<open>Formalization of the Ouroboros protocol.\<close>
   theories
     Ouroboros_BFT_Implementation
+    Ouroboros_BFT_Forwarding_Broadcasting_Equivalence
   document_files
     "root.tex"
 
