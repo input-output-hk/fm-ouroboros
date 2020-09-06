@@ -703,7 +703,17 @@ datatype broadcast_msg =
 instance broadcast_msg :: countable
   by countable_datatype
 
-type_synonym broadcast_channel = "broadcast_msg channel"
+text \<open>
+  We assume that each stakeholder has access to a channel used to receive messages broadcasted by
+  the network and a channel used to broadcast messages to the network, which constitute the
+  stakeholder's network interface:
+\<close>
+
+type_synonym receive_channel = "broadcast_msg channel"
+
+type_synonym send_channel = "broadcast_msg channel"
+
+type_synonym network_interface = "send_channel \<times> receive_channel"
 
 subsubsection \<open> The stakeholder process \<close>
 
@@ -713,41 +723,41 @@ text \<open>
 \<close>
 
 corec (friend) start_of_slot :: "
-     broadcast_channel
+     network_interface
   \<Rightarrow> stakeholder_state
   \<Rightarrow> slot
-  \<Rightarrow> (broadcast_channel \<Rightarrow> stakeholder_state \<Rightarrow> slot \<Rightarrow> process)
+  \<Rightarrow> (network_interface \<Rightarrow> stakeholder_state \<Rightarrow> slot \<Rightarrow> process)
   \<Rightarrow> process"
 where
-  "start_of_slot bc ss sl cont = (
+  "start_of_slot ni ss sl cont = (
     let
       T\<^sub>i = T(ss_id ss, slot_epoch sl, ss_G ss, ss_\<C> ss)
     in
       case is_slot_leader sl (ss_sk\<^sub>v\<^sub>r\<^sub>f ss) (ss_\<eta> ss) T\<^sub>i of
-          None \<Rightarrow> \<zero> \<parallel> cont bc ss sl \<comment> \<open>\<open>\<zero> \<parallel>\<close> is added to fulfill corecursive function requirements\<close>
+          None \<Rightarrow> \<zero> \<parallel> cont ni ss sl \<comment> \<open>\<open>\<zero> \<parallel>\<close> is added to fulfill corecursive function requirements\<close>
         | Some v \<Rightarrow>
           let
             B\<^sub>n\<^sub>e\<^sub>w = make_block ss sl v;
             ss' = extend_chain ss B\<^sub>n\<^sub>e\<^sub>w;
             ss'' = ss'\<lparr>ss_txs := []\<rparr>
           in
-            bc \<triangleleft>\<degree> BroadcastChain (ss_\<C> ss'') \<parallel> cont bc ss'' sl)"
+            (fst ni) \<triangleleft>\<degree> BroadcastChain (ss_\<C> ss'') \<parallel> cont ni ss'' sl)"
 
-corec main_loop :: "broadcast_channel \<Rightarrow> stakeholder_state \<Rightarrow> slot \<Rightarrow> process" where
-  "main_loop bc ss sl =
-    bc \<triangleright>\<degree> msg. (
+corec main_loop :: "network_interface \<Rightarrow> stakeholder_state \<Rightarrow> slot \<Rightarrow> process" where
+  "main_loop ni ss sl =
+    (snd ni) \<triangleright>\<degree> msg. (
       case msg of
         BroadcastTx tx \<Rightarrow> (
           let
             ss' = ss\<lparr>ss_txs := tx # ss_txs ss\<rparr>
           in
-            main_loop bc ss' sl)
+            main_loop ni ss' sl)
       | BroadcastChain \<C> \<Rightarrow> (
           let
             \<C>\<^sub>p = prune_after sl \<C>; \<comment> \<open>pruned blocks belonging to future slots\<close>
             ss' = if verify_chain \<C>\<^sub>p (ss_G ss) (ss_\<eta> ss) then ss\<lparr>ss_\<CC> := \<C>\<^sub>p # ss_\<CC> ss\<rparr> else ss
           in
-            main_loop bc ss' sl)
+            main_loop ni ss' sl)
       | BroadcastEndSlot sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t \<Rightarrow> (
           let
             \<comment> \<open>If new epoch, compute epoch randomness\<close>
@@ -756,7 +766,7 @@ corec main_loop :: "broadcast_channel \<Rightarrow> stakeholder_state \<Rightarr
             \<C>\<^sub>m\<^sub>a\<^sub>x = max_valid (ss_\<C> ss') (ss_\<CC> ss');
             ss'' = ss'\<lparr>ss_\<C> := \<C>\<^sub>m\<^sub>a\<^sub>x, ss_st := Some (\<H> (last \<C>\<^sub>m\<^sub>a\<^sub>x)), ss_\<CC> := []\<rparr>
           in
-            start_of_slot bc ss'' sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t main_loop))"
+            start_of_slot ni ss'' sl\<^sub>n\<^sub>e\<^sub>x\<^sub>t main_loop))"
 
 abbreviation stakeholder :: "
      stakeholder_id
@@ -764,13 +774,13 @@ abbreviation stakeholder :: "
   \<Rightarrow> secret_key
   \<Rightarrow> secret_key
   \<Rightarrow> secret_key
-  \<Rightarrow> broadcast_channel
+  \<Rightarrow> network_interface
   \<Rightarrow> process"
 where
-  "stakeholder U\<^sub>i G sk\<^sub>v\<^sub>r\<^sub>f sk\<^sub>k\<^sub>e\<^sub>s sk\<^sub>d\<^sub>s\<^sub>i\<^sub>g bc \<equiv>
+  "stakeholder U\<^sub>i G sk\<^sub>v\<^sub>r\<^sub>f sk\<^sub>k\<^sub>e\<^sub>s sk\<^sub>d\<^sub>s\<^sub>i\<^sub>g ni \<equiv>
     let
       ss\<^sub>i\<^sub>n\<^sub>i\<^sub>t = init_stakeholder_state U\<^sub>i G sk\<^sub>v\<^sub>r\<^sub>f sk\<^sub>k\<^sub>e\<^sub>s sk\<^sub>d\<^sub>s\<^sub>i\<^sub>g
     in
-      start_of_slot bc ss\<^sub>i\<^sub>n\<^sub>i\<^sub>t first_slot main_loop"
+      start_of_slot ni ss\<^sub>i\<^sub>n\<^sub>i\<^sub>t first_slot main_loop"
 
 end
