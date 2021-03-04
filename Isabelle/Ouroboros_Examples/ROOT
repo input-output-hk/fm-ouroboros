@@ -1,0 +1,8 @@
+chapter Ouroboros
+
+session Ouroboros_Examples (ouroboros) = HOL +
+  description \<open>Examples related to the Ouroboros formalization.\<close>
+  theories
+    Chain_Selection_Property
+  document_files
+    "root.tex"
