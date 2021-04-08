@@ -1,0 +1,9 @@
+chapter Ouroboros
+
+session Ouroboros (ouroboros) = Chi_Calculus +
+  description \<open>Formalization of the Ouroboros protocol.\<close>
+  theories
+    Ouroboros_BFT_Implementation
+  document_files
+    "root.tex"
+
