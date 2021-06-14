@@ -320,6 +320,39 @@ proof -
     by simp
 qed
 
+(*FIXME:
+  The following lemmas and all the other \<^theory_text>\<open>environment_dependent\<close> lemmas seem to be used only in the
+  manual rewriting under \<open>\<triangleright>\<^sup>\<infinity>\<close> and thus should be removed once the new implementation of
+  \<^theory_text>\<open>equivalence\<close> is in place.
+*)
+
+(*FIXME:
+  If we ever add some sort of wrapping to the statements of the following lemmas in order to make
+  tools that try to rewrite repeatedly not hang, we should probably also add
+  \<^theory_text>\<open>environment_dependent_stop\<close>.
+*)
+
+lemma environment_dependent_send:
+  shows "(\<lambda>e. (\<A> e \<triangleleft> \<X> e) e) = (\<lambda>e. \<A> e e) \<triangleleft> (\<lambda>e. \<X> e e)"
+  by (simp only: send_def)
+
+lemma environment_dependent_receive:
+  shows "(\<lambda>e. (\<A> e \<triangleright> x. \<P> x e) e) = (\<lambda>e. \<A> e e) \<triangleright> x. (\<lambda>e. \<P> x e e)"
+  by (simp only: receive_def)
+
+lemma environment_dependent_parallel:
+  shows "(\<lambda>e. (\<P> e \<parallel> \<Q> e) e) = (\<lambda>e. \<P> e e) \<parallel> (\<lambda>e. \<Q> e e)"
+  by (simp only: parallel_def)
+
+(*FIXME:
+  Perhaps we should add \<^theory_text>\<open>environment_dependent_new_channel\<close>, if only for completeness.
+*)
+
+(*FIXME:
+  Perhaps add \<^theory_text>\<open>environment_dependent\<close> lemmas also for higher-level constructs like the ones from
+  \<^theory_text>\<open>Thorn_Calculus-Communication\<close>.
+*)
+
 text \<open>
   We define guarding of processes at the host-language level.
 \<close>
@@ -328,6 +361,8 @@ definition guard :: "bool \<Rightarrow> process family \<Rightarrow> process fam
   [simp]: "v ? P = (if v then P else \<zero>)"
 
 (*FIXME: Add \<^theory_text>\<open>friend_of_corec\<close> declaration for \<open>guard\<close>. *)
+
+(*FIXME: Perhaps add \<^theory_text>\<open>environment_dependent_guard\<close>.*)
 
 lemma adapted_after_guard:
   shows "(v ? P) \<guillemotleft> \<E> = v ? P \<guillemotleft> \<E>"
@@ -367,6 +402,19 @@ lemma adapted_after_general_parallel:
   by
     (induction vs)
     (simp_all only: general_parallel.simps adapted_after_stop adapted_after_parallel)
+
+lemma environment_dependent_general_parallel:
+  shows "(\<lambda>e. (\<Prod>v \<leftarrow> vs. \<P> v e) e) = \<Prod>v \<leftarrow> vs. (\<lambda>e. \<P> v e e)"
+proof (induction vs)
+  case Nil
+  show ?case
+    by (simp only: general_parallel.simps(1))
+next
+  case Cons
+  then show ?case
+    unfolding general_parallel.simps(2)
+    by (subst environment_dependent_parallel, simp only:)
+qed
 
 lemma general_parallel_conversion_deferral:
   shows "\<Prod>w \<leftarrow> map f vs. \<P> w = \<Prod>v \<leftarrow> vs. \<P> (f v)"
